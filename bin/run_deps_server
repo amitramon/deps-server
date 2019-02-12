@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Run the Deps Server in "production" mode - it is run using 'waitress'.
+# Use this script for basic testing of production environment.
+
+# run this script from the parent directory of 'deps_server'
+. venv/bin/activate
+exec waitress-serve --call 'deps_server:create_app'
+
+

@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Run the Deps Server in development mode.
+
+# run this script from the parent directory of 'deps_server'
+. venv_dev/bin/activate
+export FLASK_ENV=development
+export FLASK_APP=deps_server
+
+exec flask run
