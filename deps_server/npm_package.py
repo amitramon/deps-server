@@ -56,9 +56,9 @@ class Package:
     @property
     def npm_url(self):
 
-        return '{}/{}/{}/'.format(cmn.NPM_REG_URL,
-                                  self.package_name,
-                                  self.__get_clean_version())
+        return '{}/{}/{}'.format(cmn.NPM_REG_URL,
+                                 self.package_name,
+                                 self.__get_clean_version())
 
     def fetch_deps(self):
 
