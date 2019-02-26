@@ -21,11 +21,11 @@
 Includes URL routing defintions and request handling rutines.
 """
 
-# from flask_restful import reqparse, abort, Api, Resource
 from flask_restful import abort, Api, Resource
 
-from deps_server.npm_package import NPMDepsFetcher, DepsError
-from deps_server.commons import NUM_WORKERS
+from .npm_package import DepsError
+from .npm_fetcher import NPMDepsFetcher
+from .commons import NUM_WORKERS
 
 
 def error_abort(func):

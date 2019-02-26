@@ -24,7 +24,8 @@ import argparse
 import json
 import sys
 
-from deps_server.npm_package import NPMDepsFetcher, DepsError
+from deps_server.npm_package import DepsError
+from deps_server.npm_fetcher import NPMDepsFetcher
 from deps_server.commons import NUM_WORKERS
 
 

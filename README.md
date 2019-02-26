@@ -7,6 +7,10 @@ It has a single API:
 
     /<package_name>/<version_or_tag>/
 
+The service uses Python's asyncio for concurrently fetching
+dependencies. The number of worker coroutines can be set in the
+`commons.py` file.
+
 ## Requirements
 
 The server was built and tested for Python 3. The `requirements.txt`
