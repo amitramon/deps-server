@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+
+# deps_server - simple demo of NPM dependencies fetcher Flask RESTful
+# service.
+#
+# Copyright (C) 2019 Amit Ramon <amit.ramon@riseup.net>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+"""NPM Dependencies Fetcher client."""
+
+import argparse
+import json
+import sys
+
+from deps_server.npm_package import NPMDepsFetcher, DepsError
+from deps_server.commons import NUM_WORKERS
+
+
+def get_args():
+    """Parse command line arguments"""
+
+    description = """NPM simple dependencies fetcher.
+
+    Recursively fetch dependencies for the given package and version,
+    and print the results to stdout in JSON format."""
+
+    parser = argparse.ArgumentParser(description=description)
+
+    parser.add_argument('-n', '--num-workers', type=int,
+                        default=NUM_WORKERS,
+                        help=f'number of workers to spawn '
+                        f'(default: {NUM_WORKERS})')
+
+    parser.add_argument('package', help='name of root package')
+    parser.add_argument('version', help='version or tag of root package')
+
+    return parser.parse_args()
+
+
+def main():
+
+    args = get_args()
+    npm_fetcher = NPMDepsFetcher(args.package,
+                                 args.version,
+                                 args.num_workers)
+    try:
+        res = npm_fetcher.fetch_all_deps()
+        json.dump(res, sys.stdout)
+        print()
+    except DepsError as e:
+        print(f'Error accessing NPM service: {e.err_code} {e}')
+    except Exception as e:
+        print('Unkown error:', e)
+
+
+if __name__ == '__main__':
+    main()

@@ -23,7 +23,10 @@
 PKG_NAME_KEY = 'name'
 VERSION_KEY = 'version'
 DEPS_KEY = 'dependencies'
-# TIMESTAMP_KEY = 'timestamp'
+
+# Name of dependencies key in NPM service JSON
+NPM_DEPS_KEY = 'dependencies'
 
 HTTP_STATUS_OK = 200
 NPM_REG_URL = 'https://registry.npmjs.org'
+NUM_WORKERS = 100

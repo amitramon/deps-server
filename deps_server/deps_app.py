@@ -24,8 +24,8 @@ Includes URL routing defintions and request handling rutines.
 # from flask_restful import reqparse, abort, Api, Resource
 from flask_restful import abort, Api, Resource
 
-from . import commons as cmn
-from . npm_package import bfs_fetch_deps, DepsError
+from deps_server.npm_package import NPMDepsFetcher, DepsError
+from deps_server.commons import NUM_WORKERS
 
 
 def error_abort(func):
@@ -49,11 +49,11 @@ class DepsFetcher(Resource):
     def get(self, package_name, version_or_tag):
         """Get all dependencies for the given package and version."""
 
-        deps = bfs_fetch_deps(package_name, version_or_tag)
+        npm_fetcher = NPMDepsFetcher(package_name,
+                                     version_or_tag,
+                                     NUM_WORKERS)
 
-        return {cmn.PKG_NAME_KEY: package_name,
-                cmn.VERSION_KEY: version_or_tag,
-                cmn.DEPS_KEY: deps}
+        return npm_fetcher.fetch_all_deps()
 
 
 def init_rest_api(app):
