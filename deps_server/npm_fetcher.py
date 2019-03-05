@@ -47,7 +47,8 @@ class PackageFetcher(Package):
             elif self.is_root:
                 # failed to retrive package, if it was the root
                 # package, set error status
-                return DepsError(resp.status, resp.reason)
+                print('%%%%%%%%%%%%%%%%% DepsError %%%%%%%%%%%%%%%%%')
+                raise DepsError(resp.status, resp.reason)
             else:
                 # child package - fail silently
                 return None
@@ -74,8 +75,16 @@ class NPMDepsFetcher:
 
         self._num_workers = num_workers
 
-        # Not None status means an error occurred
-        self._status = None
+    def _cleanup(self):
+        try:
+            while True:
+                self._pkgs_queue.get_nowait()
+                try:
+                    self._pkgs_queue.task_done()
+                except ValueError:
+                    pass
+        except asyncio.QueueEmpty:
+            pass
 
     async def _fetch_worker(self, name):
         """Coroutine for fetching dependencies of a package."""
@@ -85,8 +94,17 @@ class NPMDepsFetcher:
             pkg = await self._pkgs_queue.get()
 
             async with aiohttp.ClientSession() as session:
-                pkg_deps = await pkg.fetch_deps(session)
-                if isinstance(pkg_deps, list) and pkg_deps:
+                try:
+                    pkg_deps = await pkg.fetch_deps(session)
+                except DepsError as e:
+                    print('_fetch_worker got exception:', e)
+                    self._cleanup()
+                    raise
+                finally:
+                    # Notify the queue that the package has been processed.
+                    self._pkgs_queue.task_done()
+
+                if pkg_deps:
                     # OK, we received a dependencies list
                     child_pkgs = [p for p in pkg_deps
                                   if p not in self._seen_pkgs]
@@ -96,12 +114,6 @@ class NPMDepsFetcher:
                     self._seen_pkgs.update(child_pkgs)
                     for p in child_pkgs:
                         self._pkgs_queue.put_nowait(p)
-                elif isinstance(pkg_deps, DepsError):
-                    # failed to retrive root package, set error status
-                    self._status = pkg_deps
-
-            # Notify the queue that the package has been processed.
-            self._pkgs_queue.task_done()
 
     async def _bfs_fetch_deps(self):
         """Recursively fetch dependencies of given package/version."""
@@ -122,10 +134,18 @@ class NPMDepsFetcher:
         for task in tasks:
             task.cancel()
 
-        await asyncio.gather(*tasks, return_exceptions=True)
+        result = await asyncio.gather(*tasks, return_exceptions=True)
+        print('################# got results ###############')
+        for r in result:
+            if isinstance(r, DepsError):
+                print('******* results: Got DepsError *******')
+                raise r
 
         # Convert to a dictionary/list tree and return result
-        return Package.packages_to_tree(self._root_package)
+        try:
+            return Package.packages_to_tree(self._root_package)
+        except Exception as e:
+            print(f'Exception at packages_to_tree:', e)
 
     def fetch_all_deps(self):
         """Fetch all dependencies for the root package and return the result
@@ -139,8 +159,15 @@ class NPMDepsFetcher:
         except RuntimeError:
             loop = asyncio.new_event_loop()
 
-        res = loop.run_until_complete(self._bfs_fetch_deps())
-        loop.close()
-        if self._status and isinstance(self._status, Exception):
-            raise self._status
+        try:
+            res = loop.run_until_complete(self._bfs_fetch_deps())
+        except Exception as e:
+            print(f'^^^^^^^^^^^^^^^^^^^ Exception after loop:', e)
+        except DepsError:
+            raise
+        finally:
+            loop.close()
+        # res = loop.run_until_complete(self._bfs_fetch_deps())
+        # loop.close()
+
         return res
