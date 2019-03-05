@@ -47,7 +47,6 @@ class PackageFetcher(Package):
             elif self.is_root:
                 # failed to retrive package, if it was the root
                 # package, set error status
-                print('%%%%%%%%%%%%%%%%% DepsError %%%%%%%%%%%%%%%%%')
                 raise DepsError(resp.status, resp.reason)
             else:
                 # child package - fail silently
@@ -76,6 +75,7 @@ class NPMDepsFetcher:
         self._num_workers = num_workers
 
     def _cleanup(self):
+        """Clear the packages queue"""
         try:
             while True:
                 self._pkgs_queue.get_nowait()
@@ -86,34 +86,39 @@ class NPMDepsFetcher:
         except asyncio.QueueEmpty:
             pass
 
+    async def _fetch_pkg_deps(self, pkg):
+        """Fetch dependencies for pkg, associate them with pkg and add them to
+        the packages queue
+        """
+        async with aiohttp.ClientSession() as session:
+            pkg_deps = await pkg.fetch_deps(session)
+
+            if pkg_deps:
+                child_pkgs = [p for p in pkg_deps
+                              if p not in self._seen_pkgs]
+
+                # Add the new dependencies pacages to the seen
+                # packages and to the processing queue
+                self._seen_pkgs.update(child_pkgs)
+                for p in child_pkgs:
+                    self._pkgs_queue.put_nowait(p)
+
     async def _fetch_worker(self, name):
-        """Coroutine for fetching dependencies of a package."""
+        """Fetch and process dependencies of a package."""
 
         while True:
             # Get a package to work on out of the queue.
             pkg = await self._pkgs_queue.get()
-
-            async with aiohttp.ClientSession() as session:
-                try:
-                    pkg_deps = await pkg.fetch_deps(session)
-                except DepsError as e:
-                    print('_fetch_worker got exception:', e)
-                    self._cleanup()
-                    raise
-                finally:
-                    # Notify the queue that the package has been processed.
-                    self._pkgs_queue.task_done()
-
-                if pkg_deps:
-                    # OK, we received a dependencies list
-                    child_pkgs = [p for p in pkg_deps
-                                  if p not in self._seen_pkgs]
-
-                    # Add the new dependencies pacages to the seen
-                    # packages and to the processing queue
-                    self._seen_pkgs.update(child_pkgs)
-                    for p in child_pkgs:
-                        self._pkgs_queue.put_nowait(p)
+            try:
+                await self._fetch_pkg_deps(pkg)
+            except DepsError:
+                # clear queue, this will release the wait on the queue
+                # and subsequently cancell the fetch tasks
+                self._cleanup()
+                raise
+            finally:
+                # Notify the queue that the package has been processed.
+                self._pkgs_queue.task_done()
 
     async def _bfs_fetch_deps(self):
         """Recursively fetch dependencies of given package/version."""
@@ -134,18 +139,14 @@ class NPMDepsFetcher:
         for task in tasks:
             task.cancel()
 
-        result = await asyncio.gather(*tasks, return_exceptions=True)
-        print('################# got results ###############')
-        for r in result:
-            if isinstance(r, DepsError):
-                print('******* results: Got DepsError *******')
-                raise r
+        # wait until all tasks are finished
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for res in results:
+            if isinstance(res, DepsError):
+                raise res
 
         # Convert to a dictionary/list tree and return result
-        try:
-            return Package.packages_to_tree(self._root_package)
-        except Exception as e:
-            print(f'Exception at packages_to_tree:', e)
+        return Package.packages_to_tree(self._root_package)
 
     def fetch_all_deps(self):
         """Fetch all dependencies for the root package and return the result
@@ -161,13 +162,7 @@ class NPMDepsFetcher:
 
         try:
             res = loop.run_until_complete(self._bfs_fetch_deps())
-        except Exception as e:
-            print(f'^^^^^^^^^^^^^^^^^^^ Exception after loop:', e)
-        except DepsError:
-            raise
         finally:
             loop.close()
-        # res = loop.run_until_complete(self._bfs_fetch_deps())
-        # loop.close()
 
         return res
